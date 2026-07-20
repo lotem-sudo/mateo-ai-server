@@ -1,0 +1,104 @@
+require('dotenv').config(); // טוען את מפתח ה-API מקובץ ה-.env בהפעלה
+const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const Groq = require("groq-sdk");
+
+const app = express();
+const PORT = process.env.PORT || 3000; // הגדרת פורט ריצה (ברירת מחדל 3000)
+
+// שליפת המפתח בצורה מאובטחת ממשתני הסביבה
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+const config = JSON.parse(fs.readFileSync(path.join(__dirname, "config", "mateo_teacher_config.json"), "utf8"));
+const sessions = new Map();
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+app.get("/api/config", (req, res) => res.json(config));
+
+function getSession(id) {
+  if (!sessions.has(id)) {
+    sessions.set(id, {
+      history: []
+    });
+  }
+  return sessions.get(id);
+}
+
+async function buildReplyWithCloudAI(text, session) {
+  // פרומפט מערכת חכם שמנחה את ה-AI לנהל את השיחה ואת הלימוד
+  const systemPrompt = `You are Mateo, an expert personalized language teacher. 
+Your goal is to help the user learn their desired language.
+
+INSTRUCTIONS FOR THE FIRST MESSAGE:
+If this is the user's first message or they haven't specified their preferences yet, gracefully figure out or ask for:
+1. The language they want to learn.
+2. The language they want explanations in (e.g., Hebrew or English).
+3. Their main learning focus (e.g., speaking, grammar, vocabulary).
+Acknowledge their choices and immediately guide them into the first lesson or conversation topic.
+
+GENERAL TEACHING INSTRUCTIONS:
+1. Respond in a natural, friendly, and conversational way.
+2. If the user makes a grammar, spelling, or phrasing mistake in the target language, gently point it out, explain the error clearly, and provide the correct version.
+3. Keep your explanations concise and easy to understand.
+4. Always end your response with an engaging follow-up question in the target language to keep the conversation flowing.`;
+
+  // הוספת הודעת המשתמש להיסטוריה
+  session.history.push({ role: "user", content: text });
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...session.history
+  ];
+
+  try {
+    const chatCompletion = await groq.chat.completions.create({
+      messages: messages,
+      model: "llama3-8b-8192", 
+    });
+
+    const botReply = chatCompletion.choices[0].message.content;
+    
+    // שמירת תגובת הבוט בהיסטוריה
+    session.history.push({ role: "assistant", content: botReply });
+
+    return {
+      reply: botReply,
+      mode: "chat",
+      setupComplete: true 
+    };
+  } catch (error) {
+    console.error("Groq Cloud Error:", error);
+    return {
+      reply: "אופס, קרתה שגיאה בתקשורת עם ה-AI בענן. ודא שמפתח ה-API שלך מעודכן.",
+      mode: "error",
+      setupComplete: true
+    };
+  }
+}
+
+app.post("/api/chat", async (req, res) => {
+  const sessionId = req.body?.sessionId || "default";
+  const text = req.body?.message || "";
+  const session = getSession(sessionId);
+  
+  const result = await buildReplyWithCloudAI(text, session);
+  res.json(result);
+});
+
+app.post("/api/setup", (req, res) => {
+  res.json({ ok: true });
+});
+
+// ייצוא האפליקציה (עבור קבצים אחרים או בדיקות)
+module.exports = app;
+
+// האזנה לפורט - תתבצע אך ורק אם מריצים את הקובץ הזה ישירות בטרמינל
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
+}

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mateo AI - Speak-First Language Platform</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-blue: #38bdf8;
+            --accent-green: #22c55e;
+            --accent-purple: #a855f7;
+            --accent-orange: #f97316;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --border-color: #334155;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0; padding: 0;
+            display: flex; flex-direction: column;
+            height: 100vh; overflow: hidden;
+        }
+
+        header {
+            background: rgba(15, 23, 42, 0.95);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            height: 60px;
+        }
+
+        .logo { font-size: 20px; font-weight: 800; color: var(--accent-blue); letter-spacing: 1px; }
+
+        .nav-links { display: flex; gap: 8px; }
+        .nav-btn {
+            background: transparent; border: 1px solid transparent; color: var(--text-sub);
+            padding: 6px 14px; border-radius: 20px; font-weight: 600; cursor: pointer; font-size: 13px;
+        }
+        .nav-btn.active { background: var(--card-bg); border-color: var(--border-color); color: var(--accent-blue); }
+
+        .screen { display: none; flex: 1; flex-direction: column; overflow-y: auto; padding: 20px; }
+        .screen.active { display: flex; }
+
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 900px; margin: 0 auto; width: 100%; }
+        .dash-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; }
+        .primary-start-btn {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white; border: none; padding: 16px 24px; border-radius: 14px;
+            font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px;
+            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+        }
+
+        .chat-container { display: flex; flex-direction: column; height: 100%; max-width: 800px; margin: 0 auto; width: 100%; }
+        .chat-feed { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-bottom: 20px; }
+        
+        .msg-group { display: flex; flex-direction: column; gap: 6px; }
+        .msg-bubble { padding: 12px 16px; border-radius: 16px; max-width: 80%; line-height: 1.5; font-size: 15px; }
+        .msg-bubble.user { background: var(--accent-blue); color: #000; font-weight: 500; align-self: flex-start; }
+        .msg-bubble.assistant { background: var(--card-bg); border: 1px solid var(--border-color); align-self: flex-end; }
+
+        .feedback-box {
+            background: rgba(249, 115, 22, 0.1); border-right: 4px solid var(--accent-orange);
+            padding: 10px 14px; border-radius: 8px; font-size: 13px; color: #fdba74; margin-top: 4px;
+        }
+
+        .chat-input-bar {
+            display: flex; gap: 10px; padding: 12px; background: var(--card-bg);
+            border: 1px solid var(--border-color); border-radius: 30px; align-items: center;
+        }
+        .chat-input-bar input {
+            flex: 1; background: transparent; border: none; color: white; outline: none; font-size: 15px;
+        }
+        .mic-btn-circle {
+            width: 45px; height: 45px; border-radius: 50%; border: none;
+            background: var(--accent-blue); color: #000; font-size: 20px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .mic-btn-circle.recording { background: #ef4444; color: white; animation: pulse 1s infinite; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .roleplay-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; max-width: 800px; margin: 0 auto; width: 100%; }
+        .role-card {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 14px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s;
+        }
+        .role-card:hover { border-color: var(--accent-blue); transform: translateY(-2px); }
+        .role-card .icon { font-size: 32px; margin-bottom: 8px; }
+
+        .vocab-list { display: flex; flex-direction: column; gap: 10px; max-width: 800px; margin: 0 auto; width: 100%; }
+        .vocab-card {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-body { background: var(--card-bg); border: 1px solid var(--border-color); padding: 30px; border-radius: 20px; max-width: 500px; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">MATEO AI</div>
+        <div class="nav-links">
+            <button class="nav-btn active" onclick="switchTab('home')">🏠 ראשי</button>
+            <button class="nav-btn" onclick="switchTab('roleplay')">🎭 Roleplay</button>
+            <button class="nav-btn" onclick="switchTab('vocab')">📚 אוצר מילים (SRS)</button>
+            <button class="nav-btn" onclick="switchTab('progress')">📊 התקדמות</button>
+        </div>
+    </header>
+
+    <!-- 1. HOME DASHBOARD -->
+    <div id="screen-home" class="screen active">
+        <div class="dashboard-grid">
+            <div class="dash-card">
+                <h2>👋 שלום! מוכן לתרגל?</h2>
+                <p style="color: var(--text-sub);">הדרך המהירה ביותר לשפר אנגלית היא פשוט להתחיל לדבר.</p>
+                <button class="primary-start-btn" onclick="startSession('General Practice')">🎙️ התחל שיחה חופשית עכשיו</button>
+            </div>
+
+            <div class="dash-card">
+                <h3>🎯 יעד יומי</h3>
+                <p>3 / 10 דקות דיבור היום</p>
+                <div style="background: var(--border-color); height: 8px; border-radius: 4px; overflow: hidden;">
+                    <div style="background: var(--accent-green); width: 30%; height: 100%;"></div>
+                </div>
+            </div>
+
+            <div class="dash-card">
+                <h3>🔄 חזרה מרווחת (SRS)</h3>
+                <p>מילים ומשפטים ממתינים לתרגול מחדש.</p>
+                <button class="nav-btn" style="background: var(--border-color); color: white; width: 100%; padding: 10px;" onclick="switchTab('vocab')">תרגל כרטיסיות</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. ROLEPLAY PICKER -->
+    <div id="screen-roleplay" class="screen">
+        <h2 style="text-align: center; margin-bottom: 20px;">בחר תרחיש לתרגול מעשי</h2>
+        <div class="roleplay-grid">
+            <div class="role-card" onclick="startSession('Restaurant Ordering')">
+                <div class="icon">🍔</div>
+                <h3>מסעדה</h3>
+                <p style="font-size: 12px; color: var(--text-sub);">הזמנת אוכל ובירור רכיבים</p>
+            </div>
+            <div class="role-card" onclick="startSession('Job Interview')">
+                <div class="icon">💼</div>
+                <h3>ריאיון עבודה</h3>
+                <p style="font-size: 12px; color: var(--text-sub);">מענה על שאלות נפוצות</p>
+            </div>
+            <div class="role-card" onclick="startSession('Airport & Travel')">
+                <div class="icon">✈️</div>
+                <h3>שדה תעופה</h3>
+                <p style="font-size: 12px; color: var(--text-sub);">צ'ק-אין וביקורת דרכונים</p>
+            </div>
+            <div class="role-card" onclick="startSession('Hotel Check-in')">
+                <div class="icon">🏨</div>
+                <h3>מלון</h3>
+                <p style="font-size: 12px; color: var(--text-sub);">קבלה ובקשות מיוחדות</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. CONVERSATION SCREEN -->
+    <div id="screen-chat" class="screen">
+        <div class="chat-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span id="current-scenario-title" style="font-weight: bold; color: var(--accent-blue);">תרגול חופשי</span>
+                <button class="nav-btn" style="background: #ef4444; color: white;" onclick="endSession()">🏁 סיום שיעור</button>
+            </div>
+
+            <div id="chat-feed" class="chat-feed"></div>
+
+            <div class="chat-input-bar">
+                <input type="text" id="chat-input" placeholder="הקלד תגובה או לחץ על המיקרופון לדבר...">
+                <button class="nav-btn" onclick="sendTextMessage()">שלח</button>
+                <button id="mic-btn" class="mic-btn-circle" title="לחץ כדי להתחיל/להפסיק להקליט">🎤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. VOCABULARY BANK & SRS -->
+    <div id="screen-vocab" class="screen">
+        <h2 style="text-align: center;">אוצר מילים וכרטיסיות שנוצרו משיחות</h2>
+        <div id="vocab-container" class="vocab-list"></div>
+    </div>
+
+    <!-- 5. PROGRESS & ANALYTICS -->
+    <div id="screen-progress" class="screen">
+        <div style="max-width: 600px; margin: 0 auto; width: 100%;">
+            <h2>📊 מדדי התקדמות</h2>
+            <div class="dash-card" style="margin-bottom: 15px;">
+                <h3>זמן דיבור נטו</h3>
+                <p style="font-size: 28px; font-weight: bold; color: var(--accent-blue);">18 דקות השבוע</p>
+            </div>
+            <div class="dash-card">
+                <h3>שגיאות נפוצות שמתוקנות</h3>
+                <p style="color: var(--text-sub);">מפתח הזמנים (Present Perfect) שופר ב-40%.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SESSION SUMMARY MODAL -->
+    <div id="summary-modal" class="modal">
+        <div class="modal-body">
+            <h2>🎉 סיכום אימון</h2>
+            <p>כל הכבוד! סיימת סשן תרגול פעיל.</p>
+            <hr style="border-color: var(--border-color); margin: 15px 0;">
+            <div id="summary-details"></div>
+            <button class="primary-start-btn" onclick="closeSummary()">חזור למסך הבית</button>
+        </div>
+    </div>
+
+    <script>
+        const sessionId = "user_session_" + Math.random().toString(36).substr(2, 7);
+        let currentRoleplay = "General Practice";
+        let isRecording = false;
+
+        // הגדרת זיהוי קולי רציף שלא נקטע באמצע
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;    // שומר על הקלטה פעילה גם בהשתהות
+            recognition.interimResults = true; // מעדכן טקסט על המסך בזמן אמת
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                isRecording = true;
+                const micBtn = document.getElementById('mic-btn');
+                micBtn.classList.add('recording');
+                micBtn.innerText = "🛑";
+                document.getElementById('chat-input').placeholder = "מקשיב... לחץ שוב על הלחצן לסיום ושליחה";
+            };
+
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = 0; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                document.getElementById('chat-input').value = transcript;
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech Recognition Error:", event.error);
+                stopRecording();
+            };
+
+            recognition.onend = () => {
+                if (isRecording) {
+                    stopRecording();
+                }
+            };
+        }
+
+        function toggleSpeech() {
+            if (!recognition) {
+                alert("הדפדפן שלך אינו תומך בזיהוי קולי מובנה. מומלץ להשתמש ב-Google Chrome או Microsoft Edge.");
+                return;
+            }
+
+            if (isRecording) {
+                // בלחיצה שנייה: עוצרים ושולחים
+                recognition.stop();
+                stopRecording();
+                setTimeout(() => {
+                    const text = document.getElementById('chat-input').value.trim();
+                    if (text) sendTextMessage();
+                }, 300);
+            } else {
+                document.getElementById('chat-input').value = '';
+                recognition.start();
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            const micBtn = document.getElementById('mic-btn');
+            micBtn.classList.remove('recording');
+            micBtn.innerText = "🎤";
+            document.getElementById('chat-input').placeholder = "הקלד תגובה או לחץ על המיקרופון לדבר...";
+        }
+
+        document.getElementById('mic-btn').addEventListener('click', toggleSpeech);
+
+        // שליחת הודעה בלחיצה על Enter
+        document.getElementById('chat-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendTextMessage();
+            }
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+            document.getElementById(`screen-${tabName}`).classList.add('active');
+            if(tabName === 'vocab') loadVocabulary();
+        }
+
+        function startSession(scenario) {
+            currentRoleplay = scenario;
+            document.getElementById('current-scenario-title').innerText = `תרחיש: ${scenario}`;
+            document.getElementById('chat-feed').innerHTML = '';
+            switchTab('chat');
+            sendTextMessage(`Hi Mateo, let's practice ${scenario}.`);
+        }
+
+        async function sendTextMessage(customText = null) {
+            const input = document.getElementById('chat-input');
+            const text = customText || input.value.trim();
+            if (!text) return;
+
+            if (!customText) {
+                appendUserMessage(text);
+                input.value = '';
+            }
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: text,
+                        sessionId: sessionId,
+                        targetLang: 'en-US',
+                        roleplayContext: currentRoleplay
+                    })
+                });
+
+                const data = await res.json();
+                handleAssistantResponse(data);
+
+            } catch (e) {
+                console.error("Chat fetch error:", e);
+            }
+        }
+
+        function appendUserMessage(text) {
+            const feed = document.getElementById('chat-feed');
+            const group = document.createElement('div');
+            group.className = 'msg-group';
+            group.innerHTML = `<div class="msg-bubble user">${text}</div>`;
+            feed.appendChild(group);
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        function handleAssistantResponse(data) {
+            const feed = document.getElementById('chat-feed');
+            const group = document.createElement('div');
+            group.className = 'msg-group';
+
+            let html = `<div class="msg-bubble assistant">${data.reply}</div>`;
+
+            if (data.correction) {
+                html += `<div class="feedback-box">✏️ <strong>תיקון דקדוק:</strong> ${data.correction}</div>`;
+            }
+            if (data.improvedSentence) {
+                html += `<div class="feedback-box">💡 <strong>ניסוח טבעי יותר:</strong> ${data.improvedSentence}</div>`;
+            }
+
+            group.innerHTML = html;
+            feed.appendChild(group);
+            feed.scrollTop = feed.scrollHeight;
+
+            speak(data.reply);
+        }
+
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'en-US';
+                window.speechSynthesis.speak(u);
+            }
+        }
+
+        async function loadVocabulary() {
+            const res = await fetch(`/api/vocabulary/${sessionId}`);
+            const data = await res.json();
+            const container = document.getElementById('vocab-container');
+
+            if (!data.vocabulary || data.vocabulary.length === 0) {
+                container.innerHTML = `<p style="text-align: center; color: var(--text-sub);">עדיין לא נשמרו מילים. מילים מתוך השיחות יישמרו כאן אוטומטית!</p>`;
+                return;
+            }
+
+            container.innerHTML = data.vocabulary.map(v => `
+                <div class="vocab-card">
+                    <div>
+                        <strong>${v.word}</strong> - <span style="color: var(--accent-blue);">${v.translation}</span>
+                        <div style="font-size: 12px; color: var(--text-sub); margin-top: 4px;">"${v.contextSentence}"</div>
+                    </div>
+                    <span style="font-size: 12px; background: var(--border-color); padding: 4px 8px; border-radius: 10px;">חוזק: ${v.strength}/5</span>
+                </div>
+            `).join('');
+        }
+
+        function endSession() {
+            document.getElementById('summary-details').innerHTML = `
+                <p>✔️ תרחיש: ${currentRoleplay}</p>
+                <p>✔️ תרגול דיבור פעיל בסשן</p>
+                <p>✔️ נשמר בבנק הזיכרון</p>
+            `;
+            document.getElementById('summary-modal').classList.add('active');
+        }
+
+        function closeSummary() {
+            document.getElementById('summary-modal').classList.remove('active');
+            switchTab('home');
+        }
+    </script>
+</body>
+</html>

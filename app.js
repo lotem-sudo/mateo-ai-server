@@ -1,10 +1,10 @@
+import 'dotenv/config'; // טוען את המפתח מקובץ .env המקומי או מהגדרות הענן
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Groq from 'groq-sdk';
 
-// הגדרת __dirname עבור ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -13,11 +13,46 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// חיבור ל-Groq API (וודא שיש לך מפתח תקין)
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });// בסיסי נתונים בזיכרון השרת
+// יצירת הלקוח של Groq בעזרת המפתח ממשתני הסביבה
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
 const conversationHistory = {};
 const vocabularyStore = {};
 
+// ראוט התחלת שיחה: ה-AI פותח ראשון בהתאם לתרחיש
+app.post('/api/start-session', async (req, res) => {
+    try {
+        const { sessionId, roleplayContext } = req.body;
+        conversationHistory[sessionId] = [];
+        vocabularyStore[sessionId] = [];
+
+        const systemPrompt = {
+            role: 'system',
+            content: `You are Mateo, an expert and engaging English Language Tutor.
+The user chose to practice the scenario: "${roleplayContext || 'General Practice'}".
+Start the conversation immediately in character (or as a friendly tutor if general). 
+Keep your opening greeting natural, brief (1-2 sentences), and ask an inviting open question to start.`
+        };
+
+        const completion = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [systemPrompt, { role: 'user', content: 'Start the session now.' }],
+            temperature: 0.7
+        });
+
+        const initialGreeting = completion.choices[0]?.message?.content || "Hello! I'm Mateo. Ready to practice English?";
+        
+        conversationHistory[sessionId].push({ role: 'assistant', content: initialGreeting });
+
+        res.json({ reply: initialGreeting });
+
+    } catch (error) {
+        console.error('Start Session Error:', error);
+        res.status(500).json({ reply: "Hello! Let's practice English. How are you doing today?" });
+    }
+});
+
+// ראוט השרשור והשיחה הרציפה
 app.post('/api/chat', async (req, res) => {
     try {
         const { message, sessionId, roleplayContext } = req.body;
@@ -27,24 +62,17 @@ app.post('/api/chat', async (req, res) => {
             vocabularyStore[sessionId] = [];
         }
 
-        // הוספת הודעת המשתמש להיסטוריה
         conversationHistory[sessionId].push({ role: 'user', content: message });
 
-        // הנחיות קשיחות ל-AI כמורה שפה אקטיבי
         const systemPrompt = {
             role: 'system',
-            content: `You are Mateo, an expert, patient, and engaging English Language Tutor.
-Your objective is to help the user practice English in the following scenario: "${roleplayContext || 'General Conversation'}".
+            content: `You are Mateo, an expert English Language Tutor.
+Context/Scenario: "${roleplayContext || 'General Conversation'}".
 
-STRICT RULES FOR YOUR RESPONSE (JSON ONLY):
-1. **correction**: Carefully check the user's latest message for any grammar, spelling, or phrasing mistakes (e.g., if they write "does it works", "i goes", "explain to me that in").
-   - If there is an error, provide a clear, friendly correction rule in Hebrew or simple English.
-   - If the sentence is grammatically correct, return null.
-2. **improvedSentence**: Provide a more natural or native-sounding version of what the user attempted to say.
-   - If the user's sentence was already natural and perfect, return null.
-3. **reply**: Your direct, engaging response in English (2-3 sentences max).
-   - ALWAYS keep the conversation going by asking an interesting follow-up question.
-   - NEVER end the session when the user gives short responses (e.g., "okay", "yes"). Encourage them to expand!
+STRICT RULES (JSON ONLY):
+1. **correction**: Check the user's latest sentence for grammar or phrasing mistakes. Explain simply if needed. If correct, return null.
+2. **improvedSentence**: A natural, native-sounding alternative to what they said. If already perfect, return null.
+3. **reply**: Your response in English (2-3 sentences max). ALWAYS ask an engaging follow-up question to keep the conversation going.
 
 RESPONSE FORMAT (Strict JSON):
 {
@@ -66,48 +94,34 @@ RESPONSE FORMAT (Strict JSON):
         const rawContent = completion.choices[0]?.message?.content || '{}';
         const aiResponse = JSON.parse(rawContent);
 
-        // שמירת תשובת ה-AI להיסטוריה
         if (aiResponse.reply) {
             conversationHistory[sessionId].push({ role: 'assistant', content: aiResponse.reply });
         }
 
-        // חילוץ אוטומטי של מילים חדשות לכרטיסיות SRS
-        const words = message.split(' ');
-        if (words.length > 2) {
-            const sampleWord = words.find(w => w.length > 4)?.replace(/[^a-zA-Z]/g, '');
-            if (sampleWord && !vocabularyStore[sessionId].some(v => v.word.toLowerCase() === sampleWord.toLowerCase())) {
-                vocabularyStore[sessionId].push({
-                    word: sampleWord,
-                    translation: 'מילה מהשיחה',
-                    contextSentence: message,
-                    strength: 1
-                });
-            }
-        }
-
         res.json({
-            reply: aiResponse.reply || "I'm listening! Could you elaborate a bit more?",
+            reply: aiResponse.reply || "I'm listening! Could you tell me more?",
             correction: aiResponse.correction || null,
             improvedSentence: aiResponse.improvedSentence || null
         });
 
     } catch (error) {
-        console.error('Chat AI Error:', error);
+        console.error('Chat Error:', error);
         res.status(500).json({ 
-            reply: "Sorry, I had a momentary glitch. Could you try saying that again?",
+            reply: "Sorry, I had a momentary connection glitch. Could you try saying that again?",
             correction: null,
             improvedSentence: null
         });
     }
 });
 
-// שליפת מילים לכרטיסיות
+// שליפת מילים מתוך הזיכרון
 app.get('/api/vocabulary/:sessionId', (req, res) => {
     const { sessionId } = req.params;
     res.json({ vocabulary: vocabularyStore[sessionId] || [] });
 });
 
+// הפעלת השרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 Speak-First AI Server running at http://localhost:${PORT}`);
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
